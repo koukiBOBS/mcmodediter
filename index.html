@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft 基岩版模组编辑器</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --bg: #1e1e1e;
+            --panel-bg: #252526;
+            --border: #3e3e3e;
+            --text: #cccccc;
+            --text-light: #999;
+            --accent: #007acc;
+            --warning: #cca700;
+            --error: #f44747;
+            --button-bg: #0e639c;
+            --button-hover: #1177bb;
+            --tree-hover: #2a2d2e;
+            --input-bg: #3c3c3c;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .toolbar {
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            min-height: 36px;
+        }
+        .toolbar button,
+        .toolbar select {
+            background: var(--button-bg);
+            border: none;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .toolbar button:hover {
+            background: var(--button-hover);
+        }
+        .toolbar select {
+            background: var(--input-bg);
+        }
+        .separator {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+            margin: 0 4px;
+        }
+        .toolbar .spacer {
+            flex: 1;
+        }
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar .search-box {
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar .search-box input {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid #555;
+            color: #ddd;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        .sidebar .tree-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+        .sidebar .header {
+            padding: 4px 12px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-light);
+            margin-top: 8px;
+        }
+        .tree-item {
+            padding: 4px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            white-space: nowrap;
+            user-select: none;
+        }
+        .tree-item:hover {
+            background: var(--tree-hover);
+        }
+        .tree-item.selected {
+            background: #2a4a6b;
+        }
+        .tree-item .icon {
+            width: 16px;
+            text-align: center;
+            font-size: 14px;
+            color: #999;
+        }
+        .tree-item .name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tree-item.dirty .name::after {
+            content: " *";
+            color: var(--warning);
+        }
+        .context-menu {
+            position: fixed;
+            background: #2d2d2d;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 0;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .context-menu .menu-item {
+            padding: 6px 20px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #ddd;
+        }
+        .context-menu .menu-item:hover {
+            background: #094771;
+        }
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .editor-tabs {
+            display: flex;
+            background: #2d2d2d;
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            min-height: 35px;
+        }
+        .editor-tab {
+            padding: 6px 14px;
+            cursor: pointer;
+            border-right: 1px solid var(--border);
+            background: #2d2d2d;
+            color: #ccc;
+            font-size: 13px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .editor-tab.active {
+            background: #1e1e1e;
+            border-bottom: 2px solid var(--accent);
+        }
+        .editor-tab .close-btn {
+            cursor: pointer;
+            font-weight: bold;
+            padding: 0 4px;
+            border-radius: 2px;
+        }
+        .editor-tab .close-btn:hover {
+            background: #555;
+        }
+        .editor-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .CodeMirror {
+            flex: 1;
+            height: 100% !important;
+            font-size: 14px;
+        }
+        .form-view {
+            padding: 20px;
+            background: #1e1e1e;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow-y: auto;
+        }
+        .form-view label {
+            display: flex;
+            flex-direction: column;
+            font-size: 13px;
+            color: #ccc;
+            gap: 4px;
+        }
+        .form-view input,
+        .form-view textarea,
+        .form-view select {
+            padding: 6px 10px;
+            background: var(--input-bg);
+            border: 1px solid #555;
+            color: #ddd;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+        .form-view .inline {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .form-view button {
+            align-self: flex-start;
+            background: var(--button-bg);
+            border: none;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .texture-preview {
+            max-width: 128px;
+            max-height: 128px;
+            background: #333;
+            border: 1px solid #555;
+            display: none;
+        }
+        .status-bar {
+            background: var(--accent);
+            color: white;
+            padding: 2px 10px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            min-height: 22px;
+        }
+        .status-bar.error {
+            background: var(--error);
+        }
+        .hidden {
+            display: none !important;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 20px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: var(--text);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .modal-close {
+            cursor: pointer;
+            font-size: 24px;
+            color: #999;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close:hover {
+            color: var(--text);
+        }
+        .shortcut-list {
+            display: grid;
+            gap: 8px;
+        }
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: var(--bg);
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .shortcut-key {
+            background: var(--button-bg);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="newProjectBtn">新建项目</button>
+        <button id="importBtn" title="导入.mcaddon/.mcpack文件">导入项目</button>
+        <span class="separator"></span>
+        <button id="newEntityBtn" title="Ctrl+Alt+E">快速实体</button>
+        <button id="newItemBtn" title="Ctrl+Alt+I">快速物品</button>
+        <button id="newBlockBtn" title="Ctrl+Alt+B">快速方块</button>
+        <button id="newRecipeBtn" title="Ctrl+Alt+R">快速配方</button>
+        <span class="separator"></span>
+        <button id="undoBtn" title="Ctrl+Z">撤销</button>
+        <button id="redoBtn" title="Ctrl+Y">重做</button>
+        <span class="separator"></span>
+        <span style="color:#aaa;font-size:12px;">命名空间:</span>
+        <input id="namespaceInput" type="text" value="custom" style="width:100px;background:var(--input-bg);border:1px solid #555;color:#ddd;padding:4px 6px;border-radius:3px;font-size:13px;">
+        <span class="spacer"></span>
+        <select id="exportType">
+            <option value="mcaddon">导出 .mcaddon</option>
+            <option value="mcpack_bp">导出 .mcpack (行为包)</option>
+            <option value="mcpack_rp">导出 .mcpack (资源包)</option>
+        </select>
+        <button id="exportBtn">导出下载</button>
+        <button id="saveBtn" title="Ctrl+S">保存项目</button>
+        <button id="loadBtn">加载项目</button>
+        <button id="validateBtn">校验结构</button>
+        <button id="helpBtn" title="快捷键和帮助">帮助</button>
+    </div>
+
+    <div class="main">
+        <div class="sidebar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索文件...">
+            </div>
+            <div class="tree-scroll" id="fileTree">
+                <div class="header" style="margin-top:0;">项目浏览器</div>
+            </div>
+        </div>
+        <div class="editor-area">
+            <div class="editor-tabs" id="editorTabs"></div>
+            <div class="editor-content" id="editorContent">
+                <div style="color:#888; padding:40px; text-align:center; width:100%;">
+                    双击文件树中的文件以开始编辑
+                </div>
+            </div>
+            <div class="status-bar" id="statusBar">就绪</div>
+        </div>
+    </div>
+
+    <div class="context-menu" id="contextMenu"></div>
+
+    <div class="modal" id="helpModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>快捷键参考</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="shortcut-list">
+                <div class="shortcut-item">
+                    <span>保存项目</span>
+                    <span class="shortcut-key">Ctrl+S</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>撤销</span>
+                    <span class="shortcut-key">Ctrl+Z</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>重做</span>
+                    <span class="shortcut-key">Ctrl+Y</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>快速创建实体</span>
+                    <span class="shortcut-key">Ctrl+Alt+E</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>快速创建物品</span>
+                    <span class="shortcut-key">Ctrl+Alt+I</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>快速创建方块</span>
+                    <span class="shortcut-key">Ctrl+Alt+B</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>快速创建配方</span>
+                    <span class="shortcut-key">Ctrl+Alt+R</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="importFile" style="display:none;" accept=".mcaddon,.mcpack,.zip">
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/json-lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsonlint/1.6.3/jsonlint.min.js"></script>
+
+    <script>
+        (function() {
+            // ---------- 核心数据模型 ----------
+            const state = {
+                projectName: '',
+                behaviorPack: null,
+                resourcePack: null,
+                openTabs: [],
+                activeTabPath: null,
+                editorInstances: {},
+                contextMenuTarget: null,
+                fileDirty: new Set(),
+                namespace: 'custom',
+                textureImages: {},
+                selectedFilePath: null,   // 单击选中的文件路径
+                history: [],              // 撤销/重做历史
+                historyIndex: -1          // 当前历史位置
+            };
+
+            const STORAGE_KEY = 'mc_addon_editor_project';
+
+            // ---------- 工具函数 ----------
+            function generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0;
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                });
+            }
+
+            function createFolder(name) {
+                return { type: 'folder', name, children: {} };
+            }
+            function createFile(name, content = '') {
+                return { type: 'file', name, content };
+            }
+
+            function getFolder(root, pathArray) {
+                let current = root;
+                for (const seg of pathArray) {
+                    if (!current.children[seg]) {
+                        current.children[seg] = createFolder(seg);
+                    }
+                    current = current.children[seg];
+                }
+                return current;
+            }
+
+            function setFile(root, pathArray, fileName, content) {
+                const folder = getFolder(root, pathArray);
+                folder.children[fileName] = createFile(fileName, content);
+            }
+
+            function getFileContent(root, pathArray, fileName) {
+                const folder = getFolder(root, pathArray);
+                const file = folder.children[fileName];
+                return file ? file.content : null;
+            }
+
+            function updateFileContent(root, pathArray, fileName, newContent) {
+                const folder = getFolder(root, pathArray);
+                if (folder.children[fileName] && folder.children[fileName].type === 'file') {
+                    folder.children[fileName].content = newContent;
+                    return true;
+                }
+                return false;
+            }
+
+            function deleteNode(root, pathArray, name) {
+                const folder = getFolder(root, pathArray);
+                delete folder.children[name];
+            }
+
+            function getNodeByPath(pathArray) {
+                const rootName = pathArray[0];
+                const root = rootName === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                if (!root) return null;
+                const parts = pathArray.slice(1);
+                let current = root;
+                for (let i = 0; i < parts.length; i++) {
+                    if (!current.children[parts[i]]) return null;
+                    current = current.children[parts[i]];
+                }
+                return current;
+            }
+
+            function pathArrayToString(arr) {
+                return arr.join('/');
+            }
+
+            // ---------- 项目初始化 ----------
+            function createNewProject(name) {
+                state.projectName = name || 'MyAddon';
+                state.behaviorPack = createFolder('behavior_pack');
+                state.resourcePack = createFolder('resource_pack');
+                state.openTabs = [];
+                state.activeTabPath = null;
+                state.editorInstances = {};
+                state.fileDirty.clear();
+                state.textureImages = {};
+                state.selectedFilePath = null;
+
+                const bpManifest = {
+                    format_version: 2,
+                    header: {
+                        name: state.projectName + " BP",
+                        description: "Behavior pack",
+                        uuid: generateUUID(),
+                        version: [1, 0, 0],
+                        min_engine_version: [1, 20, 0]
+                    },
+                    modules: [{
+                        type: "data",
+                        uuid: generateUUID(),
+                        version: [1, 0, 0]
+                    }],
+                    dependencies: []
+                };
+                setFile(state.behaviorPack, [], 'manifest.json', JSON.stringify(bpManifest, null, 2));
+                const rpManifest = {
+                    format_version: 2,
+                    header: {
+                        name: state.projectName + " RP",
+                        description: "Resource pack",
+                        uuid: generateUUID(),
+                        version: [1, 0, 0],
+                        min_engine_version: [1, 20, 0]
+                    },
+                    modules: [{
+                        type: "resources",
+                        uuid: generateUUID(),
+                        version: [1, 0, 0]
+                    }]
+                };
+                setFile(state.resourcePack, [], 'manifest.json', JSON.stringify(rpManifest, null, 2));
+                renderFileTree();
+                setStatus('项目 "' + state.projectName + '" 已创建');
+                saveToStorage();
+            }
+
+            // ---------- 本地存储 ----------
+            function saveToStorage() {
+                try {
+                    const data = {
+                        projectName: state.projectName,
+                        behaviorPack: state.behaviorPack,
+                        resourcePack: state.resourcePack,
+                        namespace: state.namespace,
+                        textureImages: state.textureImages
+                    };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    setStatus('项目已保存到浏览器存储');
+                } catch (e) {
+                    setStatus('保存失败: ' + e.message, true);
+                }
+            }
+
+            function loadFromStorage() {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) {
+                    alert('没有找到已保存的项目');
+                    return;
+                }
+                try {
+                    const data = JSON.parse(raw);
+                    state.projectName = data.projectName || '';
+                    state.behaviorPack = data.behaviorPack || null;
+                    state.resourcePack = data.resourcePack || null;
+                    state.namespace = data.namespace || 'custom';
+                    state.textureImages = data.textureImages || {};
+                    state.openTabs = [];
+                    state.activeTabPath = null;
+                    state.editorInstances = {};
+                    state.fileDirty.clear();
+                    state.selectedFilePath = null;
+                    renderFileTree();
+                    setStatus('项目已加载: ' + state.projectName);
+                } catch (e) {
+                    alert('加载项目数据出错: ' + e.message);
+                }
+            }
+
+            // ---------- 文件树渲染（单击仅高亮，双击打开）----------
+            function renderFileTree(filterText = '') {
+                const treeEl = document.getElementById('fileTree');
+                treeEl.innerHTML = '<div class="header" style="margin-top:0;">项目浏览器</div>';
+                if (!state.behaviorPack && !state.resourcePack) {
+                    treeEl.innerHTML += '<div style="padding:12px;color:#888;">暂无项目</div>';
+                    return;
+                }
+                if (state.behaviorPack) {
+                    renderTreeNode(treeEl, state.behaviorPack, 'behavior_pack', [], filterText);
+                }
+                if (state.resourcePack) {
+                    renderTreeNode(treeEl, state.resourcePack, 'resource_pack', [], filterText);
+                }
+            }
+
+            function renderTreeNode(container, node, name, path, filter) {
+                if (filter && !name.toLowerCase().includes(filter.toLowerCase())) {
+                    if (node.type === 'folder') {
+                        let hasMatch = false;
+                        for (const childName of Object.keys(node.children)) {
+                            if (childName.toLowerCase().includes(filter.toLowerCase())) {
+                                hasMatch = true;
+                                break;
+                            }
+                        }
+                        if (!hasMatch) return;
+                    } else {
+                        return;
+                    }
+                }
+                const fullPath = [...path, name];
+                const pathStr = pathArrayToString(fullPath);
+                const div = document.createElement('div');
+                div.className = 'tree-item ' + (node.type === 'folder' ? 'folder' : 'file');
+                if (state.fileDirty.has(pathStr)) {
+                    div.classList.add('dirty');
+                }
+                if (state.selectedFilePath === pathStr) {
+                    div.classList.add('selected');
+                }
+                const icon = node.type === 'folder' ? '[D]' : '[F]';
+                div.innerHTML = `<span class="icon">${icon}</span><span class="name">${name}</span>`;
+
+                // 单击：仅高亮当前文件，不重新渲染整个树
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    if (node.type === 'file') {
+                        // 移除所有已选中样式
+                        document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+                        // 为当前元素添加选中样式
+                        div.classList.add('selected');
+                        state.selectedFilePath = pathStr;
+                    }
+                };
+
+                // 双击：打开文件进行编辑
+                div.ondblclick = (e) => {
+                    e.stopPropagation();
+                    if (node.type === 'file') {
+                        openFile(fullPath);
+                    }
+                };
+
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    state.contextMenuTarget = { path: fullPath, name, node };
+                    showContextMenu(e.clientX, e.clientY, node.type);
+                };
+                container.appendChild(div);
+
+                if (node.type === 'folder' && node.children) {
+                    const childContainer = document.createElement('div');
+                    childContainer.style.paddingLeft = '16px';
+                    for (const [childName, childNode] of Object.entries(node.children)) {
+                        renderTreeNode(childContainer, childNode, childName, fullPath, filter);
+                    }
+                    container.appendChild(childContainer);
+                }
+            }
+
+            // ---------- 右键菜单 ----------
+            function showContextMenu(x, y, type) {
+                const menu = document.getElementById('contextMenu');
+                menu.innerHTML = '';
+                if (type === 'folder') {
+                    addMenuItem(menu, '新建文件', () => {
+                        const name = prompt('输入文件名（如 example.json）:');
+                        if (name) createFileInFolder(state.contextMenuTarget.path, name);
+                    });
+                    addMenuItem(menu, '新建文件夹', () => {
+                        const name = prompt('输入文件夹名:');
+                        if (name) createFolderInFolder(state.contextMenuTarget.path, name);
+                    });
+                    addMenuItem(menu, '上传纹理', () => {
+                        uploadTextureToFolder(state.contextMenuTarget.path);
+                    });
+                }
+                addMenuItem(menu, '重命名', () => {
+                    const newName = prompt('新名称:', state.contextMenuTarget.name);
+                    if (newName && newName !== state.contextMenuTarget.name) renameNode(state.contextMenuTarget.path, newName);
+                });
+                addMenuItem(menu, '删除', () => {
+                    if (confirm('确定删除 ' + state.contextMenuTarget.name + ' 吗？')) deleteNodeFromPath(state.contextMenuTarget.path);
+                });
+                if (type === 'file') {
+                    addMenuItem(menu, '复制路径', () => {
+                        navigator.clipboard.writeText(pathArrayToString(state.contextMenuTarget.path));
+                        setStatus('路径已复制');
+                    });
+                }
+                menu.style.display = 'block';
+                menu.style.left = x + 'px';
+                menu.style.top = y + 'px';
+                setTimeout(() => {
+                    document.addEventListener('click', hideContextMenu, { once: true });
+                }, 0);
+            }
+
+            function addMenuItem(menu, text, onClick) {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.textContent = text;
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    hideContextMenu();
+                    onClick();
+                };
+                menu.appendChild(item);
+            }
+
+            function hideContextMenu() {
+                document.getElementById('contextMenu').style.display = 'none';
+                state.contextMenuTarget = null;
+            }
+
+            function createFileInFolder(pathArray, fileName) {
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                setFile(root, pathArray.slice(1), fileName, '');
+                renderFileTree();
+            }
+
+            function createFolderInFolder(pathArray, folderName) {
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                getFolder(root, pathArray.slice(1)).children[folderName] = createFolder(folderName);
+                renderFileTree();
+            }
+
+            function renameNode(pathArray, newName) {
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                const parentFolder = getFolder(root, pathArray.slice(1, -1));
+                const oldName = pathArray[pathArray.length-1];
+                if (parentFolder.children[oldName]) {
+                    parentFolder.children[newName] = parentFolder.children[oldName];
+                    parentFolder.children[newName].name = newName;
+                    delete parentFolder.children[oldName];
+                    const oldPathStr = pathArrayToString(pathArray);
+                    const newPath = [...pathArray.slice(0, -1), newName];
+                    const newPathStr = pathArrayToString(newPath);
+                    state.openTabs = state.openTabs.map(t => t.path === oldPathStr ? {...t, path: newPathStr, label: newName} : t);
+                    if (state.activeTabPath === oldPathStr) state.activeTabPath = newPathStr;
+                    if (state.selectedFilePath === oldPathStr) state.selectedFilePath = newPathStr;
+                    if (state.editorInstances[oldPathStr]) {
+                        state.editorInstances[newPathStr] = state.editorInstances[oldPathStr];
+                        delete state.editorInstances[oldPathStr];
+                    }
+                    renderFileTree();
+                    renderTabs();
+                }
+            }
+
+            function deleteNodeFromPath(pathArray) {
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                deleteNode(root, pathArray.slice(1), pathArray[pathArray.length-1]);
+                const pathStr = pathArrayToString(pathArray);
+                closeTabByPath(pathStr);
+                if (state.selectedFilePath === pathStr) state.selectedFilePath = null;
+                renderFileTree();
+            }
+
+            // ---------- 文件打开与编辑 ----------
+            function openFile(pathArray) {
+                const pathStr = pathArrayToString(pathArray);
+                if (state.openTabs.find(t => t.path === pathStr)) {
+                    activateTab(pathStr);
+                    return;
+                }
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                const content = getFileContent(root, pathArray.slice(1), pathArray[pathArray.length-1]) || '';
+                state.openTabs.push({
+                    path: pathStr,
+                    label: pathArray[pathArray.length-1],
+                    type: pathArray[pathArray.length-1].endsWith('.json') ? 'json' : 'text'
+                });
+                activateTab(pathStr);
+                renderTabs();
+                renderEditorForTab(pathStr);
+            }
+
+            function activateTab(pathStr) {
+                state.activeTabPath = pathStr;
+                renderTabs();
+                renderEditorForTab(pathStr);
+            }
+
+            function closeTabByPath(pathStr) {
+                state.openTabs = state.openTabs.filter(t => t.path !== pathStr);
+                if (state.editorInstances[pathStr]) {
+                    state.editorInstances[pathStr].toTextArea?.();
+                    delete state.editorInstances[pathStr];
+                }
+                if (state.activeTabPath === pathStr) {
+                    state.activeTabPath = state.openTabs.length > 0 ? state.openTabs[state.openTabs.length-1].path : null;
+                }
+                renderTabs();
+                if (state.activeTabPath) {
+                    renderEditorForTab(state.activeTabPath);
+                } else {
+                    document.getElementById('editorContent').innerHTML = '<div style="color:#888; padding:40px; text-align:center;">双击文件树中的文件以开始编辑</div>';
+                }
+            }
+
+            function renderTabs() {
+                const tabsEl = document.getElementById('editorTabs');
+                tabsEl.innerHTML = '';
+                state.openTabs.forEach(tab => {
+                    const tabDiv = document.createElement('div');
+                    tabDiv.className = 'editor-tab' + (tab.path === state.activeTabPath ? ' active' : '');
+                    tabDiv.innerHTML = `<span>${tab.label}</span><span class="close-btn" data-path="${tab.path}">&times;</span>`;
+                    tabDiv.querySelector('span:first-child').onclick = () => activateTab(tab.path);
+                    tabDiv.querySelector('.close-btn').onclick = (e) => {
+                        e.stopPropagation();
+                        closeTabByPath(tab.path);
+                    };
+                    tabsEl.appendChild(tabDiv);
+                });
+            }
+
+            function renderEditorForTab(pathStr) {
+                const contentEl = document.getElementById('editorContent');
+                contentEl.innerHTML = '';
+                const pathArray = pathStr.split('/');
+                const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                const fileName = pathArray[pathArray.length-1];
+                const fileContent = getFileContent(root, pathArray.slice(1), fileName) || '';
+                if (fileName === 'manifest.json') {
+                    const container = document.createElement('div');
+                    container.style.display = 'flex';
+                    container.style.flexDirection = 'column';
+                    container.style.height = '100%';
+                    const switchBar = document.createElement('div');
+                    switchBar.style.padding = '4px';
+                    switchBar.innerHTML = '<button id="switchToFormBtn">可视化编辑</button> <button id="switchToCodeBtn">代码编辑</button>';
+                    const viewContainer = document.createElement('div');
+                    viewContainer.style.flex = '1';
+                    viewContainer.id = 'manifestViewContainer';
+                    container.appendChild(switchBar);
+                    container.appendChild(viewContainer);
+                    contentEl.appendChild(container);
+
+                    const showForm = () => {
+                        viewContainer.innerHTML = '';
+                        renderManifestForm(pathStr, fileContent, viewContainer);
+                    };
+                    const showCode = () => {
+                        viewContainer.innerHTML = '';
+                        createCodeEditor(viewContainer, pathStr, fileContent);
+                    };
+                    document.getElementById('switchToFormBtn').onclick = showForm;
+                    document.getElementById('switchToCodeBtn').onclick = showCode;
+                    showCode();
+                } else if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+                    const preview = document.createElement('div');
+                    preview.style.padding = '20px';
+                    preview.innerHTML = '<p>纹理预览:</p><img id="texturePreviewImg" style="max-width:256px; max-height:256px; background:#333;" />';
+                    contentEl.appendChild(preview);
+                    const img = document.getElementById('texturePreviewImg');
+                    if (state.textureImages[pathStr]) {
+                        img.src = state.textureImages[pathStr];
+                    } else {
+                        img.alt = '未上传纹理';
+                    }
+                } else {
+                    createCodeEditor(contentEl, pathStr, fileContent);
+                }
+            }
+
+            function createCodeEditor(container, pathStr, content) {
+                const textarea = document.createElement('textarea');
+                textarea.value = content;
+                container.appendChild(textarea);
+                const editor = CodeMirror.fromTextArea(textarea, {
+                    mode: { name: 'javascript', json: true },
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    autoCloseBrackets: true,
+                    lint: true,
+                    gutters: ['CodeMirror-lint-markers'],
+                    matchBrackets: true,
+                    tabSize: 2,
+                });
+                editor.on('change', () => {
+                    const newContent = editor.getValue();
+                    const pathArray = pathStr.split('/');
+                    const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                    updateFileContent(root, pathArray.slice(1), pathArray[pathArray.length-1], newContent);
+                    state.fileDirty.add(pathStr);
+                    try {
+                        JSON.parse(newContent);
+                        setStatus('JSON 有效');
+                    } catch (e) {
+                        setStatus('JSON 错误: ' + e.message, true);
+                    }
+                });
+                state.editorInstances[pathStr] = editor;
+                editor.focus();
+            }
+
+            function renderManifestForm(pathStr, contentStr, container) {
+                let json;
+                try { json = JSON.parse(contentStr); } catch(e) { json = {}; }
+                const form = document.createElement('div');
+                form.className = 'form-view';
+                form.innerHTML = `
+                    <label>包名称 <input id="mf_name" value="${json?.header?.name || ''}"></label>
+                    <label>描述 <input id="mf_desc" value="${json?.header?.description || ''}"></label>
+                    <div class="inline">
+                        <label>版本</label>
+                        <input id="mf_ver0" value="${json?.header?.version?.[0] || 1}" style="width:50px;">
+                        <input id="mf_ver1" value="${json?.header?.version?.[1] || 0}" style="width:50px;">
+                        <input id="mf_ver2" value="${json?.header?.version?.[2] || 0}" style="width:50px;">
+                    </div>
+                    <label>UUID <div class="inline"><input id="mf_uuid" value="${json?.header?.uuid || ''}" style="flex:1;"> <button id="mf_genUuid">生成新UUID</button></div></label>
+                    <label>模块类型 <input id="mf_modtype" value="${json?.modules?.[0]?.type || 'data'}" disabled></label>
+                    <label>模块UUID <input id="mf_moduuid" value="${json?.modules?.[0]?.uuid || ''}"></label>
+                    <button id="mf_saveForm">应用更改</button>
+                `;
+                container.appendChild(form);
+                document.getElementById('mf_genUuid').onclick = () => document.getElementById('mf_uuid').value = generateUUID();
+                document.getElementById('mf_saveForm').onclick = () => {
+                    const updated = {
+                        ...json,
+                        header: {
+                            ...json.header,
+                            name: document.getElementById('mf_name').value,
+                            description: document.getElementById('mf_desc').value,
+                            uuid: document.getElementById('mf_uuid').value,
+                            version: [
+                                parseInt(document.getElementById('mf_ver0').value) || 1,
+                                parseInt(document.getElementById('mf_ver1').value) || 0,
+                                parseInt(document.getElementById('mf_ver2').value) || 0
+                            ]
+                        },
+                        modules: [{
+                            ...json.modules?.[0],
+                            uuid: document.getElementById('mf_moduuid').value
+                        }]
+                    };
+                    const newContent = JSON.stringify(updated, null, 2);
+                    const root = pathStr.split('/')[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                    updateFileContent(root, pathStr.split('/').slice(1), 'manifest.json', newContent);
+                    if (state.editorInstances[pathStr]) {
+                        state.editorInstances[pathStr].setValue(newContent);
+                    }
+                    setStatus('manifest 已更新');
+                };
+            }
+
+            // ---------- 快速创建向导 ----------
+            function getNamespace() {
+                return document.getElementById('namespaceInput').value.trim() || 'custom';
+            }
+
+            function addEntityQuick() {
+                if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                const id = prompt('实体ID (小写字母、下划线):');
+                if (!id || !/^[a-z0-9_]+$/.test(id)) { alert('ID无效'); return; }
+                const ns = getNamespace();
+                const bpContent = JSON.stringify({
+                    format_version: "1.20.0",
+                    "minecraft:entity": {
+                        description: { identifier: ns + ":" + id, is_spawnable: true, is_summonable: true },
+                        components: {}
+                    }
+                }, null, 2);
+                setFile(state.behaviorPack, ['entities'], id + '.json', bpContent);
+                if (state.resourcePack) {
+                    const rpContent = JSON.stringify({
+                        format_version: "1.20.0",
+                        "minecraft:client_entity": {
+                            description: {
+                                identifier: ns + ":" + id,
+                                materials: { default: "entity" },
+                                textures: { default: "textures/entity/" + id },
+                                geometry: { default: "geometry." + id },
+                                render_controllers: ["controller.render.default"]
+                            }
+                        }
+                    }, null, 2);
+                    setFile(state.resourcePack, ['entity'], id + '.json', rpContent);
+                }
+                renderFileTree();
+                setStatus('实体 ' + id + ' 已添加');
+                saveHistoryState();
+            }
+
+            function addItemQuick() {
+                if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                const id = prompt('物品ID:');
+                if (!id) return;
+                const ns = getNamespace();
+                const bpContent = JSON.stringify({
+                    format_version: "1.20.0",
+                    "minecraft:item": {
+                        description: { identifier: ns + ":" + id },
+                        components: { "minecraft:max_stack_size": 64 }
+                    }
+                }, null, 2);
+                setFile(state.behaviorPack, ['items'], id + '.json', bpContent);
+                renderFileTree();
+                setStatus('物品 ' + id + ' 已添加');
+                saveHistoryState();
+            }
+
+            function addBlockQuick() {
+                if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                const id = prompt('方块ID:');
+                if (!id) return;
+                const ns = getNamespace();
+                const bpContent = JSON.stringify({
+                    format_version: "1.20.0",
+                    "minecraft:block": {
+                        description: { identifier: ns + ":" + id },
+                        components: {}
+                    }
+                }, null, 2);
+                setFile(state.behaviorPack, ['blocks'], id + '.json', bpContent);
+                renderFileTree();
+                setStatus('方块 ' + id + ' 已添加');
+                saveHistoryState();
+            }
+
+            function addRecipeQuick() {
+                if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                const id = prompt('配方文件名 (如 my_recipe):');
+                if (!id) return;
+                const bpContent = JSON.stringify({
+                    format_version: "1.20.0",
+                    "minecraft:recipe_shaped": {
+                        description: { identifier: "custom:" + id },
+                        tags: ["crafting_table"],
+                        pattern: ["XXX", "X X", "XXX"],
+                        key: { "X": { "item": "minecraft:stick" } },
+                        result: { "item": "minecraft:diamond", "count": 1 }
+                    }
+                }, null, 2);
+                setFile(state.behaviorPack, ['recipes'], id + '.json', bpContent);
+                renderFileTree();
+                setStatus('配方 ' + id + ' 已添加');
+                saveHistoryState();
+            }
+
+            // ---------- 纹理上传 ----------
+            function uploadTextureToFolder(pathArray) {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/png, image/jpeg';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const base64 = ev.target.result;
+                        const fileName = file.name;
+                        const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                        setFile(root, pathArray.slice(1), fileName, '');
+                        const fullPath = pathArrayToString([...pathArray, fileName]);
+                        state.textureImages[fullPath] = base64;
+                        renderFileTree();
+                        setStatus('纹理已上传: ' + fileName);
+                    };
+                    reader.readAsDataURL(file);
+                };
+                input.click();
+            }
+
+            // ---------- 导出打包 ----------
+            function buildPackage(type) {
+                const zip = new JSZip();
+                const addFolderToZip = (zipRoot, folderNode, pathPrefix = '') => {
+                    for (const [name, node] of Object.entries(folderNode.children)) {
+                        if (node.type === 'folder') {
+                            const subFolder = zipRoot.folder(name);
+                            addFolderToZip(subFolder, node, pathPrefix + name + '/');
+                        } else {
+                            const fullPath = pathPrefix + name;
+                            if (state.textureImages[fullPath]) {
+                                const base64 = state.textureImages[fullPath];
+                                const byteString = atob(base64.split(',')[1]);
+                                const ab = new ArrayBuffer(byteString.length);
+                                const ia = new Uint8Array(ab);
+                                for (let i = 0; i < byteString.length; i++) {
+                                    ia[i] = byteString.charCodeAt(i);
+                                }
+                                zipRoot.file(name, ia, { binary: true });
+                            } else {
+                                zipRoot.file(name, node.content);
+                            }
+                        }
+                    }
+                };
+                if (type === 'mcaddon') {
+                    if (!state.behaviorPack || !state.resourcePack) {
+                        alert('需要同时存在行为包和资源包');
+                        return null;
+                    }
+                    const bpFolder = zip.folder('behavior_pack');
+                    addFolderToZip(bpFolder, state.behaviorPack, 'behavior_pack/');
+                    const rpFolder = zip.folder('resource_pack');
+                    addFolderToZip(rpFolder, state.resourcePack, 'resource_pack/');
+                } else if (type === 'mcpack_bp') {
+                    if (!state.behaviorPack) { alert('行为包不存在'); return null; }
+                    addFolderToZip(zip, state.behaviorPack, 'behavior_pack/');
+                } else if (type === 'mcpack_rp') {
+                    if (!state.resourcePack) { alert('资源包不存在'); return null; }
+                    addFolderToZip(zip, state.resourcePack, 'resource_pack/');
+                }
+                return zip;
+            }
+
+            function exportPackage() {
+                const type = document.getElementById('exportType').value;
+                const zip = buildPackage(type);
+                if (!zip) return;
+                zip.generateAsync({ type: 'blob' }).then(blob => {
+                    let filename = state.projectName || 'mod';
+                    if (type === 'mcaddon') filename += '.mcaddon';
+                    else if (type === 'mcpack_bp') filename += '_BP.mcpack';
+                    else if (type === 'mcpack_rp') filename += '_RP.mcpack';
+                    saveAs(blob, filename);
+                    setStatus('已导出: ' + filename);
+                });
+            }
+
+            function validateAllJSON() {
+                let errors = [];
+                const checkFolder = (folder, pathPrefix) => {
+                    for (const [name, node] of Object.entries(folder.children)) {
+                        if (node.type === 'file' && name.endsWith('.json')) {
+                            try {
+                                const obj = JSON.parse(node.content);
+                                // 验证manifest.json结构
+                                if (name === 'manifest.json') {
+                                    if (!obj.format_version) errors.push(pathPrefix + name + ': 缺少 format_version');
+                                    if (!obj.header) errors.push(pathPrefix + name + ': 缺少 header');
+                                    if (!obj.modules) errors.push(pathPrefix + name + ': 缺少 modules');
+                                }
+                            } catch (e) {
+                                errors.push(pathPrefix + name + ': ' + e.message);
+                            }
+                        } else if (node.type === 'folder') {
+                            checkFolder(node, pathPrefix + name + '/');
+                        }
+                    }
+                };
+                if (state.behaviorPack) checkFolder(state.behaviorPack, 'behavior_pack/');
+                if (state.resourcePack) checkFolder(state.resourcePack, 'resource_pack/');
+                if (errors.length === 0) {
+                    alert('所有JSON语法和结构正确');
+                    setStatus('校验通过');
+                } else {
+                    alert('发现 ' + errors.length + ' 个问题:\n' + errors.slice(0,10).join('\n'));
+                    setStatus('发现 ' + errors.length + ' 个问题', true);
+                }
+            }
+
+            // ---------- 撤销/重做 ----------
+            function saveHistoryState() {
+                // 移除当前位置之后的所有历史
+                state.history = state.history.slice(0, state.historyIndex + 1);
+                const snapshot = {
+                    projectName: state.projectName,
+                    behaviorPack: JSON.parse(JSON.stringify(state.behaviorPack)),
+                    resourcePack: JSON.parse(JSON.stringify(state.resourcePack)),
+                    namespace: state.namespace,
+                    textureImages: state.textureImages
+                };
+                state.history.push(snapshot);
+                state.historyIndex = state.history.length - 1;
+                updateUndoRedoButtons();
+            }
+
+            function undo() {
+                if (state.historyIndex > 0) {
+                    state.historyIndex--;
+                    restoreFromHistory(state.history[state.historyIndex]);
+                }
+            }
+
+            function redo() {
+                if (state.historyIndex < state.history.length - 1) {
+                    state.historyIndex++;
+                    restoreFromHistory(state.history[state.historyIndex]);
+                }
+            }
+
+            function restoreFromHistory(snapshot) {
+                state.projectName = snapshot.projectName;
+                state.behaviorPack = JSON.parse(JSON.stringify(snapshot.behaviorPack));
+                state.resourcePack = JSON.parse(JSON.stringify(snapshot.resourcePack));
+                state.namespace = snapshot.namespace;
+                state.textureImages = snapshot.textureImages;
+                state.openTabs = [];
+                state.activeTabPath = null;
+                state.editorInstances = {};
+                state.fileDirty.clear();
+                renderFileTree();
+                renderTabs();
+                document.getElementById('editorContent').innerHTML = '<div style="color:#888; padding:40px; text-align:center;">双击文件树中的文件以开始编辑</div>';
+                setStatus('已恢复状态');
+            }
+
+            function updateUndoRedoButtons() {
+                document.getElementById('undoBtn').disabled = state.historyIndex <= 0;
+                document.getElementById('redoBtn').disabled = state.historyIndex >= state.history.length - 1;
+            }
+
+            // ---------- 导入项目 ----------
+            function importProject() {
+                const input = document.getElementById('importFile');
+                input.click();
+            }
+
+            document.getElementById('importFile').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                    const zip = await JSZip.loadAsync(file);
+                    const projectData = { bp: null, rp: null };
+
+                    // 检测项目结构
+                    let isMcAddon = false;
+                    for (const path of Object.keys(zip.files)) {
+                        if (path.startsWith('behavior_pack/')) isMcAddon = 'bp';
+                        if (path.startsWith('resource_pack/')) isMcAddon = 'rp';
+                    }
+
+                    const loadFolder = async (zipFolder, parentNode) => {
+                        for (const path of Object.keys(zipFolder.files)) {
+                            const file = zipFolder.files[path];
+                            const relativePath = path.replace(/^[^/]+\//, '');
+                            if (file.dir) continue;
+
+                            const parts = relativePath.split('/');
+                            let current = parentNode;
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                if (!current.children[parts[i]]) {
+                                    current.children[parts[i]] = createFolder(parts[i]);
+                                }
+                                current = current.children[parts[i]];
+                            }
+
+                            const fileName = parts[parts.length - 1];
+                            if (fileName) {
+                                const content = await file.async('string');
+                                current.children[fileName] = createFile(fileName, content);
+                            }
+                        }
+                    };
+
+                    if (zip.folder('behavior_pack')) {
+                        state.behaviorPack = createFolder('behavior_pack');
+                        await loadFolder(zip.folder('behavior_pack'), state.behaviorPack);
+                    }
+                    if (zip.folder('resource_pack')) {
+                        state.resourcePack = createFolder('resource_pack');
+                        await loadFolder(zip.folder('resource_pack'), state.resourcePack);
+                    }
+
+                    if (!state.behaviorPack && !state.resourcePack) {
+                        alert('无法识别这个包文件，请确保它是有效的.mcaddon或.mcpack文件');
+                        return;
+                    }
+
+                    state.projectName = file.name.replace(/\.[^.]+$/, '');
+                    state.openTabs = [];
+                    state.activeTabPath = null;
+                    state.editorInstances = {};
+                    state.fileDirty.clear();
+                    state.selectedFilePath = null;
+
+                    renderFileTree();
+                    setStatus('项目已导入: ' + state.projectName);
+                    saveHistoryState();
+                } catch (e) {
+                    setStatus('导入失败: ' + e.message, true);
+                    console.error(e);
+                }
+            });
+
+            // ---------- 帮助对话框 ----------
+            function showHelpModal() {
+                document.getElementById('helpModal').classList.add('active');
+            }
+
+            function hideHelpModal() {
+                document.getElementById('helpModal').classList.remove('active');
+            }
+
+            document.querySelector('#helpModal .modal-close').addEventListener('click', hideHelpModal);
+            document.getElementById('helpModal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('helpModal')) hideHelpModal();
+            });
+
+            function setStatus(msg, isError = false) {
+                const bar = document.getElementById('statusBar');
+                bar.textContent = msg;
+                bar.className = 'status-bar' + (isError ? ' error' : '');
+            }
+
+            // ---------- 事件绑定 ----------
+            document.getElementById('newProjectBtn').addEventListener('click', () => {
+                const name = prompt('项目名称:');
+                if (name) {
+                    createNewProject(name);
+                    saveHistoryState();
+                }
+            });
+            document.getElementById('importBtn').addEventListener('click', importProject);
+            document.getElementById('newEntityBtn').addEventListener('click', addEntityQuick);
+            document.getElementById('newItemBtn').addEventListener('click', addItemQuick);
+            document.getElementById('newBlockBtn').addEventListener('click', addBlockQuick);
+            document.getElementById('newRecipeBtn').addEventListener('click', addRecipeQuick);
+            document.getElementById('undoBtn').addEventListener('click', undo);
+            document.getElementById('redoBtn').addEventListener('click', redo);
+            document.getElementById('exportBtn').addEventListener('click', exportPackage);
+            document.getElementById('saveBtn').addEventListener('click', saveToStorage);
+            document.getElementById('loadBtn').addEventListener('click', loadFromStorage);
+            document.getElementById('validateBtn').addEventListener('click', validateAllJSON);
+            document.getElementById('helpBtn').addEventListener('click', showHelpModal);
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                renderFileTree(e.target.value);
+            });
+            document.getElementById('namespaceInput').addEventListener('change', (e) => {
+                state.namespace = e.target.value.trim() || 'custom';
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key.toLowerCase()) {
+                        case 's':
+                            e.preventDefault();
+                            saveToStorage();
+                            break;
+                        case 'z':
+                            e.preventDefault();
+                            undo();
+                            break;
+                        case 'y':
+                            e.preventDefault();
+                            redo();
+                            break;
+                    }
+                } else if (e.altKey && e.ctrlKey) {
+                    switch(e.key.toLowerCase()) {
+                        case 'e':
+                            e.preventDefault();
+                            addEntityQuick();
+                            break;
+                        case 'i':
+                            e.preventDefault();
+                            addItemQuick();
+                            break;
+                        case 'b':
+                            e.preventDefault();
+                            addBlockQuick();
+                            break;
+                        case 'r':
+                            e.preventDefault();
+                            addRecipeQuick();
+                            break;
+                    }
+                }
+            });
+            setStatus('就绪，可新建项目或双击文件进行编辑');
+            updateUndoRedoButtons();
+        })();
+    </script>
+</body>
+</html>
