@@ -6,6 +6,7 @@
     <title>Minecraft 基岩版模组编辑器</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/display/fullscreen.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
@@ -442,8 +443,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/javascript-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/json-lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/display/fullscreen.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsonlint/1.6.3/jsonlint.min.js"></script>
 
     <script>
@@ -466,6 +471,93 @@
             };
 
             const STORAGE_KEY = 'mc_addon_editor_project';
+
+            // 代码片段库
+            const SNIPPETS = {
+                entities: {
+                    basic: {
+                        name: '基础实体',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:entity": {
+                                description: { identifier: "custom:entity_name", is_spawnable: true, is_summonable: true },
+                                components: {
+                                    "minecraft:physics": {}
+                                }
+                            }
+                        }
+                    },
+                    with_speed: {
+                        name: '带速度实体',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:entity": {
+                                description: { identifier: "custom:entity_name", is_spawnable: true },
+                                components: {
+                                    "minecraft:physics": {},
+                                    "minecraft:movement": { value: 0.3 }
+                                }
+                            }
+                        }
+                    }
+                },
+                items: {
+                    basic: {
+                        name: '基础物品',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:item": {
+                                description: { identifier: "custom:item_name" },
+                                components: {
+                                    "minecraft:max_stack_size": 64,
+                                    "minecraft:hand_equipped": true
+                                }
+                            }
+                        }
+                    },
+                    tool: {
+                        name: '工具物品',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:item": {
+                                description: { identifier: "custom:tool_name" },
+                                components: {
+                                    "minecraft:max_stack_size": 1,
+                                    "minecraft:hand_equipped": true,
+                                    "minecraft:durability": { max_durability: 100 }
+                                }
+                            }
+                        }
+                    }
+                },
+                blocks: {
+                    basic: {
+                        name: '基础方块',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:block": {
+                                description: { identifier: "custom:block_name" },
+                                components: {
+                                    "minecraft:destroy_time": 2,
+                                    "minecraft:explosion_resistance": 6
+                                }
+                            }
+                        }
+                    },
+                    liquid: {
+                        name: '液体方块',
+                        template: {
+                            format_version: "1.20.0",
+                            "minecraft:block": {
+                                description: { identifier: "custom:liquid_block" },
+                                components: {
+                                    "minecraft:liquid_container": "water"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
 
             // ---------- 工具函数 ----------
             function generateUUID() {
@@ -928,7 +1020,16 @@
                     gutters: ['CodeMirror-lint-markers'],
                     matchBrackets: true,
                     tabSize: 2,
+                    indentUnit: 2,
+                    indentWithTabs: false,
+                    extraKeys: {
+                        'Ctrl-Space': 'autocomplete',
+                        'Ctrl-/': 'toggleComment',
+                        'Ctrl-F11': cm => cm.setOption('fullScreen', !cm.getOption('fullScreen')),
+                        'Esc': cm => cm.getOption('fullScreen') && cm.setOption('fullScreen', false)
+                    }
                 });
+
                 editor.on('change', () => {
                     const newContent = editor.getValue();
                     const pathArray = pathStr.split('/');
@@ -942,6 +1043,7 @@
                         setStatus('JSON 错误: ' + e.message, true);
                     }
                 });
+
                 state.editorInstances[pathStr] = editor;
                 editor.focus();
             }
@@ -997,77 +1099,77 @@
             }
 
             // ---------- 快速创建向导 ----------
+            function showTemplateSelect(type) {
+                const templates = SNIPPETS[type];
+                if (!templates) return;
+
+                let options = Object.entries(templates)
+                    .map(([key, val]) => key + ': ' + val.name)
+                    .join('\n');
+
+                const choice = prompt('选择模板:\n' + options);
+                if (!choice) return;
+
+                const selectedKey = choice.split(':')[0].trim();
+                const template = templates[selectedKey];
+                if (!template) { alert('无效的选择'); return; }
+
+                const id = prompt('输入ID (小写字母、下划线、数字):');
+                if (!id || !/^[a-z0-9_]+$/.test(id)) { alert('ID无效'); return; }
+
+                const ns = getNamespace();
+                let content = JSON.stringify(template.template, null, 2);
+                content = content.replace(/custom:entity_name/g, ns + ':' + id)
+                                .replace(/custom:item_name/g, ns + ':' + id)
+                                .replace(/custom:block_name/g, ns + ':' + id)
+                                .replace(/custom:tool_name/g, ns + ':' + id)
+                                .replace(/custom:liquid_block/g, ns + ':' + id);
+
+                if (type === 'entities') {
+                    if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                    setFile(state.behaviorPack, ['entities'], id + '.json', content);
+                    if (state.resourcePack) {
+                        const rpContent = JSON.stringify({
+                            format_version: "1.20.0",
+                            "minecraft:client_entity": {
+                                description: {
+                                    identifier: ns + ":" + id,
+                                    materials: { default: "entity" },
+                                    textures: { default: "textures/entity/" + id },
+                                    geometry: { default: "geometry." + id },
+                                    render_controllers: ["controller.render.default"]
+                                }
+                            }
+                        }, null, 2);
+                        setFile(state.resourcePack, ['entity'], id + '.json', rpContent);
+                    }
+                } else if (type === 'items') {
+                    if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                    setFile(state.behaviorPack, ['items'], id + '.json', content);
+                } else if (type === 'blocks') {
+                    if (!state.behaviorPack) { alert('请先创建项目'); return; }
+                    setFile(state.behaviorPack, ['blocks'], id + '.json', content);
+                }
+
+                renderFileTree();
+                setStatus(type + ' ' + id + ' 已添加');
+                saveHistoryState();
+            }
+
             function getNamespace() {
                 return document.getElementById('namespaceInput').value.trim() || 'custom';
             }
 
             function addEntityQuick() {
-                if (!state.behaviorPack) { alert('请先创建项目'); return; }
-                const id = prompt('实体ID (小写字母、下划线):');
-                if (!id || !/^[a-z0-9_]+$/.test(id)) { alert('ID无效'); return; }
-                const ns = getNamespace();
-                const bpContent = JSON.stringify({
-                    format_version: "1.20.0",
-                    "minecraft:entity": {
-                        description: { identifier: ns + ":" + id, is_spawnable: true, is_summonable: true },
-                        components: {}
-                    }
-                }, null, 2);
-                setFile(state.behaviorPack, ['entities'], id + '.json', bpContent);
-                if (state.resourcePack) {
-                    const rpContent = JSON.stringify({
-                        format_version: "1.20.0",
-                        "minecraft:client_entity": {
-                            description: {
-                                identifier: ns + ":" + id,
-                                materials: { default: "entity" },
-                                textures: { default: "textures/entity/" + id },
-                                geometry: { default: "geometry." + id },
-                                render_controllers: ["controller.render.default"]
-                            }
-                        }
-                    }, null, 2);
-                    setFile(state.resourcePack, ['entity'], id + '.json', rpContent);
-                }
-                renderFileTree();
-                setStatus('实体 ' + id + ' 已添加');
-                saveHistoryState();
+                showTemplateSelect('entities');
             }
 
             function addItemQuick() {
-                if (!state.behaviorPack) { alert('请先创建项目'); return; }
-                const id = prompt('物品ID:');
-                if (!id) return;
-                const ns = getNamespace();
-                const bpContent = JSON.stringify({
-                    format_version: "1.20.0",
-                    "minecraft:item": {
-                        description: { identifier: ns + ":" + id },
-                        components: { "minecraft:max_stack_size": 64 }
-                    }
-                }, null, 2);
-                setFile(state.behaviorPack, ['items'], id + '.json', bpContent);
-                renderFileTree();
-                setStatus('物品 ' + id + ' 已添加');
-                saveHistoryState();
+                showTemplateSelect('items');
             }
 
             function addBlockQuick() {
-                if (!state.behaviorPack) { alert('请先创建项目'); return; }
-                const id = prompt('方块ID:');
-                if (!id) return;
-                const ns = getNamespace();
-                const bpContent = JSON.stringify({
-                    format_version: "1.20.0",
-                    "minecraft:block": {
-                        description: { identifier: ns + ":" + id },
-                        components: {}
-                    }
-                }, null, 2);
-                setFile(state.behaviorPack, ['blocks'], id + '.json', bpContent);
-                renderFileTree();
-                setStatus('方块 ' + id + ' 已添加');
-                saveHistoryState();
+                showTemplateSelect('blocks');
             }
 
             function addRecipeQuick() {
