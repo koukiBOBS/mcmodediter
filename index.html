@@ -374,6 +374,7 @@
         <button id="loadBtn">加载项目</button>
         <button id="validateBtn">校验结构</button>
         <button id="infoBtn" title="显示项目信息">项目信息</button>
+        <button id="configBtn" title="项目配置">⚙ 配置</button>
         <button id="helpBtn" title="快捷键和帮助">帮助</button>
     </div>
 
@@ -476,6 +477,24 @@
         </div>
     </div>
 
+    <div class="modal" id="configModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>项目配置</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="form-view" style="max-height:500px;">
+                <label>最小引擎版本
+                    <input id="configMinEngine" type="text" value="1.20.0" placeholder="如: 1.20.0">
+                </label>
+                <label>格式版本
+                    <input id="configFormatVersion" type="text" value="1.20.0" placeholder="如: 1.20.0">
+                </label>
+                <button id="saveConfigBtn" style="align-self:flex-start;background:var(--button-bg);border:none;color:white;padding:8px 16px;border-radius:3px;cursor:pointer;">保存配置</button>
+            </div>
+        </div>
+    </div>
+
     <input type="file" id="importFile" style="display:none;" accept=".mcaddon,.mcpack,.zip">
 
 
@@ -506,7 +525,11 @@
                 textureImages: {},
                 selectedFilePath: null,   // 单击选中的文件路径
                 history: [],              // 撤销/重做历史
-                historyIndex: -1          // 当前历史位置
+                historyIndex: -1,         // 当前历史位置
+                config: {                 // 项目配置
+                    minEngineVersion: '1.20.0',
+                    formatVersion: '1.20.0'
+                }
             };
 
             const STORAGE_KEY = 'mc_addon_editor_project';
@@ -1547,6 +1570,30 @@
                 }
             });
 
+            // 配置管理
+            function showConfigModal() {
+                document.getElementById('configMinEngine').value = state.config.minEngineVersion || '1.20.0';
+                document.getElementById('configFormatVersion').value = state.config.formatVersion || '1.20.0';
+                document.getElementById('configModal').classList.add('active');
+            }
+
+            document.querySelector('#configModal .modal-close').addEventListener('click', () => {
+                document.getElementById('configModal').classList.remove('active');
+            });
+
+            document.getElementById('saveConfigBtn').addEventListener('click', () => {
+                state.config.minEngineVersion = document.getElementById('configMinEngine').value || '1.20.0';
+                state.config.formatVersion = document.getElementById('configFormatVersion').value || '1.20.0';
+                setStatus('配置已保存');
+                document.getElementById('configModal').classList.remove('active');
+            });
+
+            document.getElementById('configModal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('configModal')) {
+                    document.getElementById('configModal').classList.remove('active');
+                }
+            });
+
             function setStatus(msg, isError = false) {
                 const bar = document.getElementById('statusBar');
                 bar.textContent = msg;
@@ -1574,6 +1621,7 @@
             document.getElementById('validateBtn').addEventListener('click', validateAllJSON);
             document.getElementById('helpBtn').addEventListener('click', showHelpModal);
             document.getElementById('infoBtn').addEventListener('click', showProjectInfo);
+            document.getElementById('configBtn').addEventListener('click', showConfigModal);
             document.getElementById('searchInput').addEventListener('input', (e) => {
                 const searchText = e.target.value;
                 const searchContent = document.getElementById('searchContentCheck').checked;
