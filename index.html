@@ -174,6 +174,7 @@
             border-bottom: 1px solid var(--border);
             overflow-x: auto;
             min-height: 35px;
+            align-items: center;
         }
         .editor-tab {
             padding: 6px 14px;
@@ -186,19 +187,57 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            position: relative;
+            user-select: none;
+        }
+        .editor-tab:hover {
+            background: #333333;
         }
         .editor-tab.active {
             background: #1e1e1e;
-            border-bottom: 2px solid var(--accent);
+            border-bottom: 3px solid var(--accent);
         }
         .editor-tab .close-btn {
             cursor: pointer;
             font-weight: bold;
             padding: 0 4px;
             border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
         }
         .editor-tab .close-btn:hover {
             background: #555;
+        }
+        .breadcrumb {
+            padding: 6px 12px;
+            font-size: 12px;
+            color: var(--text-light);
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .breadcrumb span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .breadcrumb-sep {
+            color: var(--text-light);
+        }
+        .editor-info-bar {
+            padding: 4px 12px;
+            font-size: 11px;
+            color: var(--text-light);
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .editor-content {
             flex: 1;
@@ -394,9 +433,15 @@
         </div>
         <div class="editor-area">
             <div class="editor-tabs" id="editorTabs"></div>
+            <div class="breadcrumb" id="breadcrumb" style="display:none;"></div>
+            <div class="editor-info-bar" id="editorInfoBar" style="display:none;">
+                <span id="editorFileInfo"></span>
+                <span id="editorLineInfo"></span>
+            </div>
             <div class="editor-content" id="editorContent">
-                <div style="color:#888; padding:40px; text-align:center; width:100%;">
-                    双击文件树中的文件以开始编辑
+                <div style="color:#888; padding:40px; text-align:center; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
+                    <div style="font-size:16px; margin-bottom:16px;">📁 欢迎使用 Minecraft Mod 编辑器</div>
+                    <div style="font-size:13px;">双击左侧文件树中的文件以开始编辑</div>
                 </div>
             </div>
             <div class="status-bar" id="statusBar">就绪</div>
@@ -1017,17 +1062,24 @@
             function closeTabByPath(pathStr) {
                 state.openTabs = state.openTabs.filter(t => t.path !== pathStr);
                 if (state.editorInstances[pathStr]) {
-                    state.editorInstances[pathStr].toTextArea?.();
+                    try {
+                        state.editorInstances[pathStr].toTextArea?.();
+                    } catch (e) {
+                        console.error('Error cleaning up editor:', e);
+                    }
                     delete state.editorInstances[pathStr];
                 }
+                state.fileDirty.delete(pathStr);
+
                 if (state.activeTabPath === pathStr) {
                     state.activeTabPath = state.openTabs.length > 0 ? state.openTabs[state.openTabs.length-1].path : null;
                 }
+
                 renderTabs();
                 if (state.activeTabPath) {
                     renderEditorForTab(state.activeTabPath);
                 } else {
-                    document.getElementById('editorContent').innerHTML = '<div style="color:#888; padding:40px; text-align:center;">双击文件树中的文件以开始编辑</div>';
+                    renderEditorForTab(null);
                 }
             }
 
@@ -1037,55 +1089,176 @@
                 state.openTabs.forEach(tab => {
                     const tabDiv = document.createElement('div');
                     tabDiv.className = 'editor-tab' + (tab.path === state.activeTabPath ? ' active' : '');
-                    tabDiv.innerHTML = `<span>${tab.label}</span><span class="close-btn" data-path="${tab.path}">&times;</span>`;
-                    tabDiv.querySelector('span:first-child').onclick = () => activateTab(tab.path);
+
+                    const isDirty = state.fileDirty.has(tab.path);
+                    const dirtyDot = isDirty ? '<span style="color:var(--accent); font-weight:bold;">●</span>' : '';
+
+                    tabDiv.innerHTML = `${dirtyDot}<span>${tab.label}</span><span class="close-btn" data-path="${tab.path}">&times;</span>`;
+
+                    // 点击tab激活
+                    tabDiv.querySelector('span:not(.close-btn)').onclick = () => activateTab(tab.path);
+
+                    // 关闭tab
                     tabDiv.querySelector('.close-btn').onclick = (e) => {
                         e.stopPropagation();
                         closeTabByPath(tab.path);
                     };
+
                     tabsEl.appendChild(tabDiv);
                 });
             }
 
+            function updateBreadcrumb(pathArray) {
+                const breadcrumbEl = document.getElementById('breadcrumb');
+                if (!pathArray || pathArray.length === 0) {
+                    breadcrumbEl.style.display = 'none';
+                    return;
+                }
+
+                breadcrumbEl.innerHTML = '';
+                breadcrumbEl.style.display = 'flex';
+
+                for (let i = 0; i < pathArray.length; i++) {
+                    if (i > 0) {
+                        const sep = document.createElement('span');
+                        sep.className = 'breadcrumb-sep';
+                        sep.textContent = '›';
+                        breadcrumbEl.appendChild(sep);
+                    }
+
+                    const span = document.createElement('span');
+                    span.textContent = pathArray[i];
+                    span.style.color = i === pathArray.length - 1 ? '#cccccc' : '#999999';
+                    breadcrumbEl.appendChild(span);
+                }
+            }
+
+            function updateEditorInfo(pathStr, content) {
+                const infoBar = document.getElementById('editorInfoBar');
+                const fileInfo = document.getElementById('editorFileInfo');
+                const lineInfo = document.getElementById('editorLineInfo');
+
+                infoBar.style.display = 'flex';
+
+                const lines = content ? content.split('\n').length : 0;
+                const bytes = content ? new Blob([content]).size : 0;
+
+                fileInfo.textContent = `UTF-8 • ${bytes} B • ${lines} 行`;
+
+                if (state.editorInstances[pathStr]) {
+                    const editor = state.editorInstances[pathStr];
+                    editor.on('cursorActivity', () => {
+                        const cursor = editor.getCursor();
+                        lineInfo.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
+                    });
+                }
+            }
+
             function renderEditorForTab(pathStr) {
+                if (!pathStr) {
+                    document.getElementById('editorContent').innerHTML = '<div style="color:#888; padding:40px; text-align:center; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;"><div style="font-size:16px; margin-bottom:16px;">📁 欢迎使用 Minecraft Mod 编辑器</div><div style="font-size:13px;">双击左侧文件树中的文件以开始编辑</div></div>';
+                    document.getElementById('breadcrumb').style.display = 'none';
+                    document.getElementById('editorInfoBar').style.display = 'none';
+                    return;
+                }
+
                 const contentEl = document.getElementById('editorContent');
                 contentEl.innerHTML = '';
                 const pathArray = pathStr.split('/');
                 const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
                 const fileName = pathArray[pathArray.length-1];
                 const fileContent = getFileContent(root, pathArray.slice(1), fileName) || '';
+
+                updateBreadcrumb(pathArray);
+                updateEditorInfo(pathStr, fileContent);
+
                 if (fileName === 'manifest.json') {
                     const container = document.createElement('div');
                     container.style.display = 'flex';
                     container.style.flexDirection = 'column';
                     container.style.height = '100%';
+
                     const switchBar = document.createElement('div');
-                    switchBar.style.padding = '4px';
-                    switchBar.innerHTML = '<button id="switchToFormBtn">可视化编辑</button> <button id="switchToCodeBtn">代码编辑</button>';
+                    switchBar.style.padding = '8px 12px';
+                    switchBar.style.background = '#252526';
+                    switchBar.style.borderBottom = '1px solid #3e3e3e';
+                    switchBar.style.display = 'flex';
+                    switchBar.style.gap = '8px';
+
+                    const formBtn = document.createElement('button');
+                    formBtn.textContent = '📋 可视化编辑';
+                    formBtn.style.background = '#0e639c';
+                    formBtn.style.border = 'none';
+                    formBtn.style.color = 'white';
+                    formBtn.style.padding = '4px 12px';
+                    formBtn.style.borderRadius = '3px';
+                    formBtn.style.cursor = 'pointer';
+                    formBtn.style.fontSize = '12px';
+
+                    const codeBtn = document.createElement('button');
+                    codeBtn.textContent = '{ } 代码编辑';
+                    codeBtn.style.background = '#0e639c';
+                    codeBtn.style.border = 'none';
+                    codeBtn.style.color = 'white';
+                    codeBtn.style.padding = '4px 12px';
+                    codeBtn.style.borderRadius = '3px';
+                    codeBtn.style.cursor = 'pointer';
+                    codeBtn.style.fontSize = '12px';
+
+                    switchBar.appendChild(formBtn);
+                    switchBar.appendChild(codeBtn);
+
                     const viewContainer = document.createElement('div');
                     viewContainer.style.flex = '1';
+                    viewContainer.style.overflow = 'auto';
                     viewContainer.id = 'manifestViewContainer';
+
                     container.appendChild(switchBar);
                     container.appendChild(viewContainer);
                     contentEl.appendChild(container);
 
                     const showForm = () => {
+                        formBtn.style.background = '#1177bb';
+                        codeBtn.style.background = 'var(--button-bg)';
                         viewContainer.innerHTML = '';
                         renderManifestForm(pathStr, fileContent, viewContainer);
                     };
+
                     const showCode = () => {
+                        codeBtn.style.background = '#1177bb';
+                        formBtn.style.background = 'var(--button-bg)';
                         viewContainer.innerHTML = '';
                         createCodeEditor(viewContainer, pathStr, fileContent);
                     };
-                    document.getElementById('switchToFormBtn').onclick = showForm;
-                    document.getElementById('switchToCodeBtn').onclick = showCode;
+
+                    formBtn.onclick = showForm;
+                    codeBtn.onclick = showCode;
                     showCode();
                 } else if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
                     const preview = document.createElement('div');
                     preview.style.padding = '20px';
-                    preview.innerHTML = '<p>纹理预览:</p><img id="texturePreviewImg" style="max-width:256px; max-height:256px; background:#333;" />';
+                    preview.style.display = 'flex';
+                    preview.style.flexDirection = 'column';
+                    preview.style.alignItems = 'center';
+                    preview.style.justifyContent = 'center';
+
+                    const title = document.createElement('p');
+                    title.textContent = '🖼️ 纹理预览';
+                    title.style.marginBottom = '16px';
+                    title.style.color = 'var(--text-light)';
+
+                    const img = document.createElement('img');
+                    img.id = 'texturePreviewImg';
+                    img.style.maxWidth = '400px';
+                    img.style.maxHeight = '400px';
+                    img.style.background = '#333';
+                    img.style.borderRadius = '4px';
+                    img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+
+                    preview.appendChild(title);
+                    preview.appendChild(img);
                     contentEl.appendChild(preview);
-                    const img = document.getElementById('texturePreviewImg');
+
                     if (state.textureImages[pathStr]) {
                         img.src = state.textureImages[pathStr];
                     } else {
@@ -1097,44 +1270,72 @@
             }
 
             function createCodeEditor(container, pathStr, content) {
+                // 清空容器
+                container.innerHTML = '';
+
                 const textarea = document.createElement('textarea');
                 textarea.value = content;
+                textarea.style.display = 'none';
                 container.appendChild(textarea);
-                const editor = CodeMirror.fromTextArea(textarea, {
-                    mode: { name: 'javascript', json: true },
-                    theme: 'monokai',
-                    lineNumbers: true,
-                    autoCloseBrackets: true,
-                    lint: true,
-                    gutters: ['CodeMirror-lint-markers'],
-                    matchBrackets: true,
-                    tabSize: 2,
-                    indentUnit: 2,
-                    indentWithTabs: false,
-                    extraKeys: {
-                        'Ctrl-Space': 'autocomplete',
-                        'Ctrl-/': 'toggleComment',
-                        'Ctrl-F11': cm => cm.setOption('fullScreen', !cm.getOption('fullScreen')),
-                        'Esc': cm => cm.getOption('fullScreen') && cm.setOption('fullScreen', false)
-                    }
-                });
 
-                editor.on('change', () => {
-                    const newContent = editor.getValue();
-                    const pathArray = pathStr.split('/');
-                    const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
-                    updateFileContent(root, pathArray.slice(1), pathArray[pathArray.length-1], newContent);
-                    state.fileDirty.add(pathStr);
-                    try {
-                        JSON.parse(newContent);
-                        setStatus('JSON 有效');
-                    } catch (e) {
-                        setStatus('JSON 错误: ' + e.message, true);
-                    }
-                });
+                try {
+                    const editor = CodeMirror.fromTextArea(textarea, {
+                        mode: { name: 'javascript', json: true },
+                        theme: 'monokai',
+                        lineNumbers: true,
+                        autoCloseBrackets: true,
+                        lint: true,
+                        gutters: ['CodeMirror-lint-markers'],
+                        matchBrackets: true,
+                        tabSize: 2,
+                        indentUnit: 2,
+                        indentWithTabs: false,
+                        lineWrapping: true,
+                        styleActiveLine: true,
+                        highlightSelectionMatches: { showToken: /\w/, annotateScrollbar: true },
+                        extraKeys: {
+                            'Ctrl-Space': 'autocomplete',
+                            'Ctrl-/': 'toggleComment',
+                            'Ctrl-F11': cm => cm.setOption('fullScreen', !cm.getOption('fullScreen')),
+                            'Esc': cm => cm.getOption('fullScreen') && cm.setOption('fullScreen', false),
+                            'Ctrl-S': () => saveToStorage()
+                        }
+                    });
 
-                state.editorInstances[pathStr] = editor;
-                editor.focus();
+                    // 修复编辑器大小
+                    editor.setSize('100%', '100%');
+
+                    editor.on('change', () => {
+                        const newContent = editor.getValue();
+                        const pathArray = pathStr.split('/');
+                        const root = pathArray[0] === 'behavior_pack' ? state.behaviorPack : state.resourcePack;
+                        updateFileContent(root, pathArray.slice(1), pathArray[pathArray.length-1], newContent);
+                        state.fileDirty.add(pathStr);
+                        renderTabs();
+
+                        try {
+                            JSON.parse(newContent);
+                            setStatus('✓ JSON 有效');
+                        } catch (e) {
+                            setStatus('✗ JSON 错误: ' + e.message, true);
+                        }
+
+                        updateEditorInfo(pathStr, newContent);
+                    });
+
+                    editor.on('cursorActivity', () => {
+                        const cursor = editor.getCursor();
+                        document.getElementById('editorLineInfo').textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
+                    });
+
+                    state.editorInstances[pathStr] = editor;
+                    editor.focus();
+                    setStatus('编辑器已就绪 - ' + pathStr.split('/').pop());
+                } catch (e) {
+                    console.error('Creating CodeMirror editor failed:', e);
+                    container.innerHTML = '<div style="padding:20px; color:#f44747;">加载编辑器失败: ' + e.message + '</div>';
+                    setStatus('编辑器加载失败', true);
+                }
             }
 
             function renderManifestForm(pathStr, contentStr, container) {
