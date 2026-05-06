@@ -373,13 +373,19 @@
         <button id="saveBtn" title="Ctrl+S">保存项目</button>
         <button id="loadBtn">加载项目</button>
         <button id="validateBtn">校验结构</button>
+        <button id="infoBtn" title="显示项目信息">项目信息</button>
         <button id="helpBtn" title="快捷键和帮助">帮助</button>
     </div>
 
     <div class="main">
         <div class="sidebar">
             <div class="search-box">
-                <input type="text" id="searchInput" placeholder="搜索文件...">
+                <input type="text" id="searchInput" placeholder="搜索文件..." title="输入'*'后跟关键词可搜索文件内容">
+            </div>
+            <div style="padding:4px 8px; font-size:11px; color:#999; background:var(--bg);">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                    <input type="checkbox" id="searchContentCheck"> 搜索内容
+                </label>
             </div>
             <div class="tree-scroll" id="fileTree">
                 <div class="header" style="margin-top:0;">项目浏览器</div>
@@ -432,6 +438,39 @@
                 <div class="shortcut-item">
                     <span>快速创建配方</span>
                     <span class="shortcut-key">Ctrl+Alt+R</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>编辑器全屏</span>
+                    <span class="shortcut-key">Ctrl+F11</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>代码注释切换</span>
+                    <span class="shortcut-key">Ctrl+/</span>
+                </div>
+                <div class="shortcut-item">
+                    <span>代码自动补全</span>
+                    <span class="shortcut-key">Ctrl+Space</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="projectInfoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>项目信息</h2>
+                <button class="modal-close" data-modal="projectInfoModal">&times;</button>
+            </div>
+            <div style="padding:12px;">
+                <p><strong>项目名称:</strong> <span id="projName">-</span></p>
+                <p><strong>命名空间:</strong> <span id="projNamespace">-</span></p>
+                <p><strong>总文件数:</strong> <span id="projFileCount">0</span></p>
+                <p><strong>JSON文件:</strong> <span id="projJsonCount">0</span></p>
+                <p><strong>纹理文件:</strong> <span id="projTextureCount">0</span></p>
+                <p><strong>已修改文件:</strong> <span id="projDirtyCount">0</span></p>
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+                    <p><strong>行为包:</strong> <span id="projBpStatus">未创建</span></p>
+                    <p><strong>资源包:</strong> <span id="projRpStatus">未创建</span></p>
                 </div>
             </div>
         </div>
@@ -720,18 +759,45 @@
             }
 
             // ---------- 文件树渲染（单击仅高亮，双击打开）----------
-            function renderFileTree(filterText = '') {
+            function renderFileTree(filterText = '', searchContent = false) {
                 const treeEl = document.getElementById('fileTree');
                 treeEl.innerHTML = '<div class="header" style="margin-top:0;">项目浏览器</div>';
                 if (!state.behaviorPack && !state.resourcePack) {
                     treeEl.innerHTML += '<div style="padding:12px;color:#888;">暂无项目</div>';
                     return;
                 }
-                if (state.behaviorPack) {
-                    renderTreeNode(treeEl, state.behaviorPack, 'behavior_pack', [], filterText);
-                }
-                if (state.resourcePack) {
-                    renderTreeNode(treeEl, state.resourcePack, 'resource_pack', [], filterText);
+
+                if (searchContent && filterText) {
+                    // 搜索文件内容
+                    const results = [];
+                    const searchInFolder = (folder, path) => {
+                        for (const [name, node] of Object.entries(folder.children)) {
+                            if (node.type === 'file' && node.content && node.content.toLowerCase().includes(filterText.toLowerCase())) {
+                                results.push({ path: [...path, name], name, node });
+                            } else if (node.type === 'folder') {
+                                searchInFolder(node, [...path, name]);
+                            }
+                        }
+                    };
+                    if (state.behaviorPack) searchInFolder(state.behaviorPack, ['behavior_pack']);
+                    if (state.resourcePack) searchInFolder(state.resourcePack, ['resource_pack']);
+
+                    treeEl.innerHTML += '<div class="header">搜索结果: ' + results.length + ' 个</div>';
+                    results.forEach(result => {
+                        const div = document.createElement('div');
+                        div.className = 'tree-item file';
+                        div.innerHTML = `<span class="icon">[F]</span><span class="name">${result.name}</span>`;
+                        div.ondblclick = () => openFile(result.path);
+                        treeEl.appendChild(div);
+                    });
+                } else {
+                    // 文件名搜索
+                    if (state.behaviorPack) {
+                        renderTreeNode(treeEl, state.behaviorPack, 'behavior_pack', [], filterText);
+                    }
+                    if (state.resourcePack) {
+                        renderTreeNode(treeEl, state.resourcePack, 'resource_pack', [], filterText);
+                    }
                 }
             }
 
@@ -1439,9 +1505,46 @@
                 document.getElementById('helpModal').classList.remove('active');
             }
 
+            function showProjectInfo() {
+                // 计算项目统计
+                let totalFiles = 0, jsonCount = 0, textureCount = 0;
+                const countFiles = (folder) => {
+                    for (const [name, node] of Object.entries(folder.children)) {
+                        if (node.type === 'file') {
+                            totalFiles++;
+                            if (name.endsWith('.json')) jsonCount++;
+                            if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) textureCount++;
+                        } else if (node.type === 'folder') {
+                            countFiles(node);
+                        }
+                    }
+                };
+                if (state.behaviorPack) countFiles(state.behaviorPack);
+                if (state.resourcePack) countFiles(state.resourcePack);
+
+                document.getElementById('projName').textContent = state.projectName || '未创建';
+                document.getElementById('projNamespace').textContent = state.namespace;
+                document.getElementById('projFileCount').textContent = totalFiles;
+                document.getElementById('projJsonCount').textContent = jsonCount;
+                document.getElementById('projTextureCount').textContent = textureCount;
+                document.getElementById('projDirtyCount').textContent = state.fileDirty.size;
+                document.getElementById('projBpStatus').textContent = state.behaviorPack ? '✓ 已创建' : '未创建';
+                document.getElementById('projRpStatus').textContent = state.resourcePack ? '✓ 已创建' : '未创建';
+
+                document.getElementById('projectInfoModal').classList.add('active');
+            }
+
             document.querySelector('#helpModal .modal-close').addEventListener('click', hideHelpModal);
+            document.querySelector('#projectInfoModal .modal-close').addEventListener('click', (e) => {
+                document.getElementById('projectInfoModal').classList.remove('active');
+            });
             document.getElementById('helpModal').addEventListener('click', (e) => {
                 if (e.target === document.getElementById('helpModal')) hideHelpModal();
+            });
+            document.getElementById('projectInfoModal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('projectInfoModal')) {
+                    document.getElementById('projectInfoModal').classList.remove('active');
+                }
             });
 
             function setStatus(msg, isError = false) {
@@ -1470,8 +1573,15 @@
             document.getElementById('loadBtn').addEventListener('click', loadFromStorage);
             document.getElementById('validateBtn').addEventListener('click', validateAllJSON);
             document.getElementById('helpBtn').addEventListener('click', showHelpModal);
+            document.getElementById('infoBtn').addEventListener('click', showProjectInfo);
             document.getElementById('searchInput').addEventListener('input', (e) => {
-                renderFileTree(e.target.value);
+                const searchText = e.target.value;
+                const searchContent = document.getElementById('searchContentCheck').checked;
+                renderFileTree(searchText, searchContent);
+            });
+            document.getElementById('searchContentCheck').addEventListener('change', (e) => {
+                const searchText = document.getElementById('searchInput').value;
+                renderFileTree(searchText, e.target.checked);
             });
             document.getElementById('namespaceInput').addEventListener('change', (e) => {
                 state.namespace = e.target.value.trim() || 'custom';
