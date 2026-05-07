@@ -58,9 +58,20 @@
             cursor: pointer;
             font-size: 13px;
             white-space: nowrap;
+            transition: all 0.15s;
         }
         .toolbar button:hover {
             background: var(--button-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .toolbar button:active {
+            transform: translateY(0);
+        }
+        .toolbar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
         }
         .toolbar select {
             background: var(--input-bg);
@@ -122,12 +133,16 @@
             font-size: 13px;
             white-space: nowrap;
             user-select: none;
+            transition: all 0.15s;
         }
         .tree-item:hover {
             background: var(--tree-hover);
+            padding-left: 14px;
         }
         .tree-item.selected {
             background: #2a4a6b;
+            border-left: 3px solid var(--accent);
+            padding-left: 11px;
         }
         .tree-item .icon {
             width: 16px;
@@ -289,6 +304,17 @@
             padding: 6px 16px;
             border-radius: 3px;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .form-view button:hover {
+            background: var(--button-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-view button:active {
+            transform: translateY(0);
         }
         .texture-preview {
             max-width: 128px;
@@ -305,12 +331,47 @@
             display: flex;
             align-items: center;
             min-height: 22px;
+            animation: statusPulse 0.3s ease-out;
         }
+
+        @keyframes statusPulse {
+            0% {
+                background: #1177bb;
+            }
+            100% {
+                background: var(--accent);
+            }
+        }
+
         .status-bar.error {
             background: var(--error);
+            animation: errorShake 0.3s ease-out;
         }
-        .hidden {
-            display: none !important;
+
+        @keyframes errorShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-2px); }
+            75% { transform: translateX(2px); }
+        }
+
+        .status-bar.success {
+            background: #4ec9b0;
+        }
+
+        /* 加载指示器 */
+        .loading-indicator {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
         }
         .modal {
             display: none;
@@ -337,15 +398,21 @@
             max-height: 80vh;
             overflow-y: auto;
             color: var(--text);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            animation: modalSlideIn 0.2s ease-out;
         }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 12px;
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
+
         .modal-header h2 {
             margin: 0;
             font-size: 18px;
@@ -1177,29 +1244,29 @@
                 const menu = document.getElementById('contextMenu');
                 menu.innerHTML = '';
                 if (type === 'folder') {
-                    addMenuItem(menu, '新建文件', () => {
+                    addMenuItem(menu, '➕ 新建文件', () => {
                         const name = prompt('输入文件名（如 example.json）:');
                         if (name) createFileInFolder(state.contextMenuTarget.path, name);
                     });
-                    addMenuItem(menu, '新建文件夹', () => {
+                    addMenuItem(menu, '📁 新建文件夹', () => {
                         const name = prompt('输入文件夹名:');
                         if (name) createFolderInFolder(state.contextMenuTarget.path, name);
                     });
-                    addMenuItem(menu, '上传纹理', () => {
+                    addMenuItem(menu, '🖼 上传纹理', () => {
                         uploadTextureToFolder(state.contextMenuTarget.path);
                     });
                 }
-                addMenuItem(menu, '重命名', () => {
+                addMenuItem(menu, '✏️ 重命名', () => {
                     const newName = prompt('新名称:', state.contextMenuTarget.name);
                     if (newName && newName !== state.contextMenuTarget.name) renameNode(state.contextMenuTarget.path, newName);
                 });
-                addMenuItem(menu, '删除', () => {
+                addMenuItem(menu, '🗑 删除', () => {
                     if (confirm('确定删除 ' + state.contextMenuTarget.name + ' 吗？')) deleteNodeFromPath(state.contextMenuTarget.path);
                 });
                 if (type === 'file') {
-                    addMenuItem(menu, '复制路径', () => {
+                    addMenuItem(menu, '📋 复制路径', () => {
                         navigator.clipboard.writeText(pathArrayToString(state.contextMenuTarget.path));
-                        setStatus('路径已复制');
+                        setStatus('✓ 路径已复制');
                     });
                 }
                 menu.style.display = 'block';
@@ -2034,8 +2101,25 @@
 
             function setStatus(msg, isError = false) {
                 const bar = document.getElementById('statusBar');
+                const isSuccess = msg.startsWith('✓');
                 bar.textContent = msg;
-                bar.className = 'status-bar' + (isError ? ' error' : '');
+                bar.className = 'status-bar';
+
+                if (isError) {
+                    bar.className = 'status-bar error';
+                } else if (isSuccess) {
+                    bar.className = 'status-bar success';
+                } else {
+                    bar.className = 'status-bar';
+                }
+
+                // 3秒后自动清除
+                setTimeout(() => {
+                    if (bar.textContent === msg) {
+                        bar.textContent = '就绪';
+                        bar.className = 'status-bar';
+                    }
+                }, 3000);
             }
 
             // ---------- 事件绑定 ----------
