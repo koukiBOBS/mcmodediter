@@ -846,6 +846,27 @@
 
     <input type="file" id="importFile" style="display:none;" accept=".mcaddon,.mcpack,.zip">
 
+    <div class="modal" id="welcomeModal">
+        <div class="modal-content" style="text-align:center; max-width:400px;">
+            <div style="font-size:48px; margin-bottom:16px;">🎮</div>
+            <div class="modal-header">
+                <h2>欢迎使用 Mod 编辑器</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div style="text-align:left; padding:12px; line-height:1.6;">
+                <p>👋 欢迎！此编辑器帮助你快速创建 Minecraft 基岩版模组。</p>
+                <p><strong>快速开始:</strong></p>
+                <ul style="margin-left:16px; color:var(--text-light);">
+                    <li>点击"新建项目"创建新项目</li>
+                    <li>使用快速创建按钮添加实体、物品等</li>
+                    <li>在右侧编辑器中修改 JSON 文件</li>
+                    <li>点击"导出"下载你的模组包</li>
+                </ul>
+                <button id="startProjectBtn" style="width:100%; margin-top:16px; background:var(--button-bg); border:none; color:white; padding:8px; border-radius:3px; cursor:pointer; font-size:14px;">🚀 创建新项目</button>
+            </div>
+        </div>
+    </div>
+
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
@@ -1039,7 +1060,9 @@
             }
 
             // ---------- 项目初始化 ----------
-            function createNewProject(name) {
+            // 创建新项目
+            createNewProject = (name) => {
+                if (!name) return;
                 state.projectName = name || 'MyAddon';
                 state.behaviorPack = createFolder('behavior_pack');
                 state.resourcePack = createFolder('resource_pack');
@@ -1084,9 +1107,10 @@
                 };
                 setFile(state.resourcePack, [], 'manifest.json', JSON.stringify(rpManifest, null, 2));
                 renderFileTree();
-                setStatus('项目 "' + state.projectName + '" 已创建');
+                setStatus('✓ 项目 "' + state.projectName + '" 已创建');
+                saveHistoryState();
                 saveToStorage();
-            }
+            };
 
             // ---------- 本地存储 ----------
             function saveToStorage() {
@@ -2122,12 +2146,34 @@
                 }, 3000);
             }
 
-            // ---------- 事件绑定 ----------
+            // 事件绑定 ----------
             document.getElementById('newProjectBtn').addEventListener('click', () => {
-                const name = prompt('项目名称:');
+                const name = prompt('项目名称 (如: MyMod):');
+                if (name) createNewProject(name);
+            });
+
+            document.getElementById('startProjectBtn').addEventListener('click', () => {
+                const name = prompt('项目名称 (如: MyMod):');
                 if (name) {
                     createNewProject(name);
-                    saveHistoryState();
+                    document.getElementById('welcomeModal').classList.remove('active');
+                }
+            });
+
+            // 欢迎模态框
+            if (!state.behaviorPack && !state.resourcePack) {
+                setTimeout(() => {
+                    document.getElementById('welcomeModal').classList.add('active');
+                }, 500);
+            }
+
+            document.querySelector('#welcomeModal .modal-close').addEventListener('click', () => {
+                document.getElementById('welcomeModal').classList.remove('active');
+            });
+
+            document.getElementById('welcomeModal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('welcomeModal')) {
+                    document.getElementById('welcomeModal').classList.remove('active');
                 }
             });
             document.getElementById('importBtn').addEventListener('click', importProject);
