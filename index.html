@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Minecraft 基岩版模组编辑器</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
@@ -385,36 +385,273 @@
             font-family: 'Courier New', monospace;
             font-weight: bold;
         }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                font-size: 14px;
+            }
+
+            .toolbar {
+                flex-wrap: wrap;
+                min-height: auto;
+                padding: 4px 8px;
+                gap: 4px;
+            }
+
+            .toolbar button,
+            .toolbar select {
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+
+            .separator {
+                display: none;
+            }
+
+            .main {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: 35vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                max-height: 300px;
+                z-index: 100;
+            }
+
+            .sidebar.hidden {
+                display: none;
+            }
+
+            .editor-area {
+                height: 65vh;
+                min-height: 300px;
+            }
+
+            .sidebar .header {
+                padding: 4px 8px;
+                font-size: 10px;
+                margin-top: 4px;
+            }
+
+            .tree-item {
+                padding: 3px 8px;
+                font-size: 12px;
+            }
+
+            .editor-tabs {
+                min-height: 32px;
+            }
+
+            .editor-tab {
+                padding: 4px 8px;
+                font-size: 11px;
+                gap: 4px;
+            }
+
+            .editor-tab .close-btn {
+                width: 16px;
+                height: 16px;
+            }
+
+            .breadcrumb {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+
+            .editor-info-bar {
+                padding: 3px 8px;
+                font-size: 10px;
+            }
+
+            .toolbar .spacer {
+                display: none;
+            }
+
+            #namespaceInput {
+                width: 70px !important;
+                padding: 3px 4px !important;
+                font-size: 11px !important;
+            }
+
+            .status-bar {
+                font-size: 11px;
+                padding: 2px 8px;
+                min-height: 20px;
+            }
+
+            .form-view {
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .form-view input,
+            .form-view textarea,
+            .form-view select {
+                padding: 4px 6px;
+                font-size: 13px;
+            }
+
+            .modal-content {
+                width: 95%;
+                max-width: 100%;
+                max-height: 90vh;
+                padding: 16px;
+            }
+
+            .modal-header {
+                margin-bottom: 12px;
+            }
+
+            .modal-header h2 {
+                font-size: 16px;
+            }
+
+            .CodeMirror {
+                font-size: 12px !important;
+            }
+
+            .CodeMirror-linenumber {
+                width: 30px !important;
+            }
+
+            /* 移动菜单按钮 */
+            #toggleSidebarBtn {
+                display: inline-flex;
+            }
+
+            .editor-content {
+                flex: 1;
+                display: flex;
+                overflow: hidden;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .toolbar {
+                padding: 3px 4px;
+                gap: 2px;
+            }
+
+            .toolbar button,
+            .toolbar select,
+            .toolbar span {
+                padding: 3px 6px;
+                font-size: 10px;
+                white-space: nowrap;
+            }
+
+            #exportBtn,
+            #saveBtn,
+            #loadBtn,
+            #validateBtn {
+                display: none;
+            }
+
+            .sidebar {
+                height: 30vh;
+            }
+
+            .editor-area {
+                height: 70vh;
+            }
+
+            .editor-tab span {
+                max-width: 100px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .shortcut-list {
+                gap: 4px;
+            }
+
+            .shortcut-item {
+                padding: 6px;
+                font-size: 11px;
+                justify-content: space-between;
+                flex-direction: column;
+            }
+        }
+
+        /* 横屏模式 */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .sidebar {
+                height: 100%;
+                width: 30vw;
+                border-right: 1px solid var(--border);
+                border-bottom: none;
+            }
+
+            .main {
+                flex-direction: row;
+            }
+
+            .editor-area {
+                height: 100%;
+                flex: 1;
+            }
+        }
+
+        /* 触摸设备优化 */
+        @media (hover: none) and (pointer: coarse) {
+            .tree-item:active {
+                background: var(--tree-hover);
+            }
+
+            .editor-tab:active {
+                background: #333333;
+            }
+
+            button:active {
+                opacity: 0.8;
+            }
+
+            .toolbar button,
+            .toolbar select {
+                min-height: 40px;
+                padding: 8px 12px;
+            }
+
+            .tree-item {
+                padding: 8px;
+                min-height: 32px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="toolbar">
+        <button id="toggleSidebarBtn" style="display:none; font-size:16px;">☰</button>
         <button id="newProjectBtn">新建项目</button>
         <button id="importBtn" title="导入.mcaddon/.mcpack文件">导入项目</button>
         <span class="separator"></span>
-        <button id="newEntityBtn" title="Ctrl+Alt+E">快速实体</button>
-        <button id="newItemBtn" title="Ctrl+Alt+I">快速物品</button>
-        <button id="newBlockBtn" title="Ctrl+Alt+B">快速方块</button>
-        <button id="newRecipeBtn" title="Ctrl+Alt+R">快速配方</button>
+        <button id="newEntityBtn" title="Ctrl+Alt+E">⚔ 实体</button>
+        <button id="newItemBtn" title="Ctrl+Alt+I">🎁 物品</button>
+        <button id="newBlockBtn" title="Ctrl+Alt+B">🧱 方块</button>
+        <button id="newRecipeBtn" title="Ctrl+Alt+R">⚗ 配方</button>
         <span class="separator"></span>
-        <button id="undoBtn" title="Ctrl+Z">撤销</button>
-        <button id="redoBtn" title="Ctrl+Y">重做</button>
+        <button id="undoBtn" title="Ctrl+Z">↶</button>
+        <button id="redoBtn" title="Ctrl+Y">↷</button>
         <span class="separator"></span>
         <span style="color:#aaa;font-size:12px;">命名空间:</span>
         <input id="namespaceInput" type="text" value="custom" style="width:100px;background:var(--input-bg);border:1px solid #555;color:#ddd;padding:4px 6px;border-radius:3px;font-size:13px;">
         <span class="spacer"></span>
-        <select id="exportType">
-            <option value="mcaddon">导出 .mcaddon</option>
-            <option value="mcpack_bp">导出 .mcpack (行为包)</option>
-            <option value="mcpack_rp">导出 .mcpack (资源包)</option>
+        <select id="exportType" style="max-width:120px;">
+            <option value="mcaddon">.mcaddon</option>
+            <option value="mcpack_bp">.mcpack BP</option>
+            <option value="mcpack_rp">.mcpack RP</option>
         </select>
-        <button id="exportBtn">导出下载</button>
-        <button id="saveBtn" title="Ctrl+S">保存项目</button>
-        <button id="loadBtn">加载项目</button>
-        <button id="validateBtn">校验结构</button>
-        <button id="infoBtn" title="显示项目信息">项目信息</button>
-        <button id="configBtn" title="项目配置">⚙ 配置</button>
-        <button id="helpBtn" title="快捷键和帮助">帮助</button>
+        <button id="exportBtn">导出</button>
+        <button id="saveBtn" title="Ctrl+S">💾</button>
+        <button id="loadBtn">📂</button>
+        <button id="validateBtn">✓</button>
+        <button id="infoBtn" title="项目信息">ℹ</button>
+        <button id="configBtn" title="配置">⚙</button>
+        <button id="helpBtn" title="帮助">?</button>
     </div>
 
     <div class="main">
@@ -1874,6 +2111,34 @@
             });
             setStatus('就绪，可新建项目或双击文件进行编辑');
             updateUndoRedoButtons();
+
+            // 移动端适配
+            const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+            const sidebar = document.querySelector('.sidebar');
+
+            function updateResponsive() {
+                if (window.innerWidth <= 768) {
+                    toggleSidebarBtn.style.display = 'inline-flex';
+                    sidebar.style.position = 'relative';
+                } else {
+                    toggleSidebarBtn.style.display = 'none';
+                    sidebar.classList.remove('hidden');
+                    sidebar.style.position = 'relative';
+                }
+            }
+
+            toggleSidebarBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('hidden');
+                toggleSidebarBtn.textContent = sidebar.classList.contains('hidden') ? '→' : '☰';
+            });
+
+            window.addEventListener('resize', updateResponsive);
+            updateResponsive();
+
+            // 防止移动端缩放
+            document.addEventListener('touchmove', (e) => {
+                if (e.scale !== 1) e.preventDefault();
+            }, { passive: false });
         })();
     </script>
 </body>
